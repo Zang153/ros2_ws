@@ -1,0 +1,15 @@
+# 忽略 ROS 2 的编译、安装和日志目录
+build/
+install/
+log/
+
+# 忽略 Python 缓存文件
+__pycache__/
+*.py[cod]
+
+# 忽略 IDE 配置文件夹 (可选)
+.vscode/
+.idea/
+
+# 忽略系统生成文件
+.DS_Store
