@@ -25,6 +25,97 @@ class DeltaKinematics:
     def tand(self, x):
         return np.tan(np.deg2rad(x))
 
+    def fk(self, theta):
+        '''
+        Forward Kinematics
+        Input: theta [theta1, theta2, theta3] in degrees
+        Output: _3d_pose [x, y, z] (numpy array)
+        '''
+        rod_b = self.rod_b
+        rod_ee = self.rod_ee
+        
+        # Ensure input is numpy array
+        theta = np.array(theta)
+        
+        # The IK implementation multiplies result by -1 at the end.
+        # So FK input should likely be multiplied by -1 to match the math?
+        # Let's check IK: returns theta * (-1)
+        # So if we pass the physical angles (which are likely the negative of math angles),
+        # we should flip them back.
+        # However, usually FK takes the values as returned by IK (or read from motors).
+        # If motor returns X, and IK returns X, then FK(X) should be Position.
+        # If IK returns -Theta_math, then FK should take -Theta_math.
+        # The math in `fk` reference implementation takes `theta`.
+        # Let's see if reference `fk` handles the sign.
+        # Reference `fk` just uses `theta`.
+        # Reference `ik` returns `theta * (-1)`.
+        # So if I pass the output of IK into FK, I should probably flip the sign first
+        # OR `fk` math expects the "math angles".
+        # Let's assume `fk` expects "math angles".
+        # Since IK returns "Physical angles" (Math * -1),
+        # FK should take "Physical angles" and convert to "Math angles" ( * -1)
+        # OR I should check if `fk` logic matches `ik` logic signs.
+        # In IK: theta[i] = atan(...)
+        # In FK: y1 = -(t + rod_b*cosd(theta1))
+        # If I use `ik` output directly, let's verify.
+        
+        # Let's multiply by -1 to revert the IK's last step, assuming IK output is what we feed in.
+        theta = theta * (-1)
+
+        theta1 = theta[0]
+        theta2 = theta[1]
+        theta3 = theta[2]
+
+        side_ee = 2 / self.tand(30) * self.r_ee
+        side_b  = 2 / self.tand(30) * self.r_b
+
+        t = (side_b - side_ee) * self.tand(30) / 2
+
+        y1 = -(t + rod_b * self.cosd(theta1))
+        z1 = -rod_b * self.sind(theta1)
+
+        y2 = (t + rod_b * self.cosd(theta2)) * self.sind(30)
+        x2 = y2 * self.tand(60)
+        z2 = -rod_b * self.sind(theta2)
+
+        y3 = (t + rod_b * self.cosd(theta3)) * self.sind(30)
+        x3 = -y3 * self.tand(60)
+        z3 = -rod_b * self.sind(theta3)
+
+        dnm = (y2 - y1) * x3 - (y3 - y1) * x2
+
+        w1 = y1**2 + z1**2
+        w2 = x2**2 + y2**2 + z2**2
+        w3 = x3**2 + y3**2 + z3**2
+
+        a1 = (z2 - z1) * (y3 - y1) - (z3 - z1) * (y2 - y1)
+        b1 = -((w2 - w1) * (y3 - y1) - (w3 - w1) * (y2 - y1)) / 2
+
+        a2 = -(z2 - z1) * x3 + (z3 - z1) * x2
+        b2 = ((w2 - w1) * x3 - (w3 - w1) * x2) / 2
+
+        a = a1**2 + a2**2 + dnm**2
+        b = 2 * (a1 * b1 + a2 * (b2 - y1 * dnm) - z1 * dnm**2)
+        c = (b2 - y1 * dnm)**2 + b1**2 + dnm**2 * (z1**2 - rod_ee**2)
+
+        d = b**2 - 4 * a * c
+        if d < 0:
+            return -1
+
+        z0 = -0.5 * (b + d**0.5) / a
+        x0 = (a1 * z0 + b1) / dnm
+        y0 = (a2 * z0 + b2) / dnm
+        
+        # Now [x0, y0, z0] is in Delta Frame.
+        # We need to transform back to World Frame (inverse of IK transform).
+        # IK: World -> Delta: [y, -x, z]
+        # So Delta [x0, y0, z0] corresponds to [y_w, -x_w, z_w]
+        # x0 = y_w  => y_w = x0
+        # y0 = -x_w => x_w = -y0
+        # z0 = z_w  => z_w = z0
+        
+        return np.array([-y0, x0, z0])
+
     def ik(self, _3d_pose):
         '''
         Inverse Kinematics

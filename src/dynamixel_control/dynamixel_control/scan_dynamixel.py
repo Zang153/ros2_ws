@@ -10,7 +10,7 @@ def main():
     PROTOCOL_VERSION = 2.0
 
     # Device name
-    DEVICENAME = '/dev/ttyUSB0'
+    DEVICENAME = '/dev/ttyUSB1'
 
     # Baudrates to scan
     BAUDRATES = [57600, 1000000, 9600, 115200, 3000000, 4000000]

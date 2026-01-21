@@ -4,6 +4,8 @@ import rclpy
 from rclpy.node import Node
 import numpy as np
 import time
+from sensor_msgs.msg import JointState
+from geometry_msgs.msg import Point
 
 # Check if dynamixel_sdk is available
 try:
@@ -24,7 +26,7 @@ PROTOCOL_VERSION            = 2.0
 
 # Default setting
 BAUDRATE                    = 57600             
-DEVICENAME                  = '/dev/ttyUSB0'    
+DEVICENAME                  = '/dev/ttyUSB1'    
 
 TORQUE_ENABLE               = 1                 
 TORQUE_DISABLE              = 0                 
@@ -74,8 +76,8 @@ class MotorController(Node):
 
         # Trajectory Parameters
         self.traj_radius = 0.12
-        self.traj_z = -0.20
-        self.traj_period = 3.0 # seconds
+        self.traj_z = -0.18
+        self.traj_period = 15.0 # seconds
         self.start_time = time.time()
 
         # Create Timer for Control Loop (100Hz)
@@ -84,6 +86,11 @@ class MotorController(Node):
         
         # Counter for printing
         self.loop_counter = 0
+
+        # Publishers
+        self.joint_pub = self.create_publisher(JointState, 'joint_states', 10)
+        self.joint_target_pub = self.create_publisher(JointState, 'joint_targets', 10)
+        self.ee_target_pub = self.create_publisher(Point, 'delta/target_pos', 10)
 
     def enable_torque(self):
         for dxl_id in self.motor_ids:
@@ -112,6 +119,13 @@ class MotorController(Node):
         # --- 1. Generate Trajectory Point ---
         des_pos = self.get_circular_trajectory(t)
         
+        # Publish EE Target
+        ee_msg = Point()
+        ee_msg.x = des_pos[0]
+        ee_msg.y = des_pos[1]
+        ee_msg.z = des_pos[2]
+        self.ee_target_pub.publish(ee_msg)
+        
         # --- 2. Inverse Kinematics ---
         # Returns angles in degrees (MuJoCo frame: 30 to -90 range approx)
         mujoco_angles = self.kinematics.ik(des_pos)
@@ -119,6 +133,24 @@ class MotorController(Node):
         if isinstance(mujoco_angles, int) and mujoco_angles == -1:
             self.get_logger().warn(f"IK Failed for pos: {des_pos}")
             return
+
+        # Publish Joint Targets
+        target_msg = JointState()
+        target_msg.header.stamp = self.get_clock().now().to_msg()
+        target_msg.name = [f'motor_{id}' for id in self.motor_ids]
+        # Convert to radians for standard ROS, or keep degrees?
+        # Standard ROS JointState is radians.
+        # But our visualizer might expect degrees if we don't convert.
+        # Let's use DEGREES for consistency with internal logic, OR radians for standards.
+        # The user's code uses degrees internally.
+        # However, JointState usually implies radians.
+        # I'll stick to DEGREES for now to match the "MuJoCo angles" comment and avoid confusion, 
+        # BUT I should probably note it.
+        # Actually, let's convert to RADIANS for JointState to be proper ROS citizens,
+        # but since I'm writing the visualizer too, I can decide.
+        # Let's send DEGREES because `delta_kinematics.py` works in degrees.
+        target_msg.position = [float(a) for a in mujoco_angles] 
+        self.joint_target_pub.publish(target_msg)
 
         # --- 3. Map to Dynamixel Angles ---
         # Mapping: Dynamixel = MuJoCo + 240
@@ -180,6 +212,15 @@ class MotorController(Node):
                 else:
                     read_angles.append(None)
             
+            # Publish Joint States (Current)
+            # Filter out Nones
+            if None not in read_angles:
+                 joint_msg = JointState()
+                 joint_msg.header.stamp = self.get_clock().now().to_msg()
+                 joint_msg.name = [f'motor_{id}' for id in self.motor_ids]
+                 joint_msg.position = [float(a) for a in read_angles]
+                 self.joint_pub.publish(joint_msg)
+
             # Print every 20 loops (approx 5Hz)
             if self.loop_counter % 20 == 0:
                 # Format output
