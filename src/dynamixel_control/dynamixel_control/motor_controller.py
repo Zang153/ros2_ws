@@ -21,12 +21,23 @@ ADDR_TORQUE_ENABLE          = 64
 ADDR_GOAL_POSITION          = 116
 ADDR_PRESENT_POSITION       = 132
 
+from dynamixel_control.scan_dynamixel import get_available_port
+
 # Protocol version
 PROTOCOL_VERSION            = 2.0
 
-# Default setting
-BAUDRATE                    = 57600             
-DEVICENAME                  = '/dev/ttyUSB1'    
+# Default setting (Will be overwritten by scan)
+BAUDRATE                    = 57600
+DEVICENAME                  = '/dev/ttyUSB1'
+
+# Try to detect port automatically
+detected_port, detected_baud = get_available_port()
+if detected_port:
+    print(f"Automatically detected Dynamixel on {detected_port} at {detected_baud} baud.")
+    DEVICENAME = detected_port
+    BAUDRATE = detected_baud
+else:
+    print(f"Could not detect Dynamixel. Using default: {DEVICENAME} at {BAUDRATE} baud.")
 
 TORQUE_ENABLE               = 1                 
 TORQUE_DISABLE              = 0                 
