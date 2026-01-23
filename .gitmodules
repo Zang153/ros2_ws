@@ -1,0 +1,6 @@
+[submodule "src/px4_msgs"]
+	path = src/px4_msgs
+	url = https://github.com/PX4/px4_msgs.git
+[submodule "src/vrpn_mocap"]
+	path = src/vrpn_mocap
+	url = https://github.com/alvinsunyixiao/vrpn_mocap.git
