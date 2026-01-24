@@ -29,6 +29,7 @@ setup(
         'console_scripts': [
             'mocap_bridge = px4_offboard.mocap_bridge:main',
             'offboard_control = px4_offboard.offboard_control:main',
+            'visualizer = px4_offboard.visualizer:main',
         ],
     },
 )
