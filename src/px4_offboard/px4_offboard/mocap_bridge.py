@@ -14,7 +14,7 @@ class MocapBridge(Node):
         super().__init__('mocap_bridge')
 
         # Parameters
-        self.declare_parameter('pose_topic', '/vrpn_client_node/RigidBody/pose')
+        self.declare_parameter('pose_topic', '/vrpn_mocap/AM/pose')
         self.declare_parameter('px4_topic', '/fmu/in/vehicle_visual_odometry')
         
         self.pose_topic = self.get_parameter('pose_topic').value
@@ -28,12 +28,20 @@ class MocapBridge(Node):
             depth=1
         )
 
+        # QoS for Mocap (Best Effort to match publisher)
+        mocap_qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+
         # Subscribers
         self.pose_sub = self.create_subscription(
             PoseStamped,
             self.pose_topic,
             self.pose_callback,
-            10
+            mocap_qos_profile
         )
 
         # Publishers
