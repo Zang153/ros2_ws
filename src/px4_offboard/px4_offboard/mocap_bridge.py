@@ -16,16 +16,18 @@ class MocapBridge(Node):
         # Parameters
         self.declare_parameter('pose_topic', '/vrpn_mocap/AM/pose')
         self.declare_parameter('px4_topic', '/fmu/in/vehicle_visual_odometry')
+        self.declare_parameter('frequency', 0)  # Default 30 Hz. Set to 0 for unlimited (input rate)
         
         self.pose_topic = self.get_parameter('pose_topic').value
         self.px4_topic = self.get_parameter('px4_topic').value
+        self.frequency = self.get_parameter('frequency').value
 
         # QoS for PX4
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
             history=HistoryPolicy.KEEP_LAST,
-            depth=1
+            depth=20
         )
 
         # QoS for Mocap (Best Effort to match publisher)
@@ -33,7 +35,7 @@ class MocapBridge(Node):
             reliability=ReliabilityPolicy.BEST_EFFORT,
             durability=DurabilityPolicy.VOLATILE,
             history=HistoryPolicy.KEEP_LAST,
-            depth=1
+            depth=20
         )
 
         # Subscribers
@@ -51,9 +53,26 @@ class MocapBridge(Node):
             qos_profile
         )
         
-        self.get_logger().info(f"Mocap Bridge Started. Listening on {self.pose_topic}, publishing to {self.px4_topic}")
+        self.latest_pose_msg = None
+        
+        if self.frequency > 0:
+            timer_period = 1.0 / self.frequency
+            self.timer = self.create_timer(timer_period, self.timer_callback)
+            self.get_logger().info(f"Mocap Bridge Started. Listening on {self.pose_topic}, publishing to {self.px4_topic} at {self.frequency} Hz")
+        else:
+            self.get_logger().info(f"Mocap Bridge Started. Listening on {self.pose_topic}, publishing to {self.px4_topic} at input rate")
 
     def pose_callback(self, msg):
+        if self.frequency > 0:
+            self.latest_pose_msg = msg
+        else:
+            self.publish_odometry(msg)
+
+    def timer_callback(self):
+        if self.latest_pose_msg is not None:
+            self.publish_odometry(self.latest_pose_msg)
+
+    def publish_odometry(self, msg):
         odom_msg = VehicleOdometry()
 
         # Timestamp sync (convert nanoseconds to microseconds)
